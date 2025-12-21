@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Enhanced placeholder text styling for better visibility */
+input::placeholder,
+textarea::placeholder,
+select::placeholder {
+  color: #6b7280 !important; /* Darker gray (gray-500) */
+  opacity: 0.8 !important;
+  font-weight: 400;
+}
+
+/* Specific styling for search and filter inputs */
+input[type="text"]::placeholder,
+input[type="email"]::placeholder,
+input[type="password"]::placeholder {
+  color: #4b5563 !important; /* Even darker gray (gray-600) */
+  opacity: 0.9 !important;
+  font-style: normal;
+}
+
+/* Focus state for better user experience */
+input:focus::placeholder,
+textarea:focus::placeholder,
+select:focus::placeholder {
+  color: #9ca3af !important; /* Lighter when focused (gray-400) */
+  opacity: 0.6 !important;
+}
+
+/* Enhanced styling for select elements and their options */
+select {
+  color: #374151 !important; /* Darker text color (gray-700) */
+  font-weight: 500;
+}
+
+/* Style for select options - including placeholder-like options */
+select option {
+  color: #374151 !important; /* Darker text color (gray-700) */
+  font-weight: 400;
+  background-color: white;
+}
+
+/* Specific styling for the first option which often acts as a placeholder */
+select option:first-child {
+  color: #4b5563 !important; /* Even darker for placeholder options (gray-600) */
+  font-weight: 500;
+}
+
+/* When select is in focus, make the selected option more visible */
+select:focus {
+  color: #1f2937 !important; /* Almost black (gray-800) */
+}
+
+/* Additional styling for better contrast in dropdowns */
+select option:hover {
+  background-color: #f3f4f6 !important; /* Light gray background on hover */
+}
+
+input {
+  color: var(--foreground);
+}
+/* Mobile-first responsive design */
+.mobile-container {
+  @apply w-full max-w-sm mx-auto;
+}
+
+.mobile-button {
+  @apply w-full py-3 px-4 text-center font-medium rounded-lg;
+}
+
+.mobile-input {
+  @apply w-full py-3 px-4 text-lg rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500;
+}
+
+.mobile-card {
+  @apply bg-white rounded-lg shadow-sm p-4 mb-4;
+}
+
+.mobile-header {
+  @apply text-xl font-semibold text-gray-800 mb-2;
+}
+
+.mobile-text {
+  @apply text-base text-gray-600;
+}
+
+.mobile-link {
+  @apply text-indigo-600 font-medium hover:text-indigo-500;
+}
+
+/* Touch-friendly interactions */
+.touch-target {
+  @apply min-h-11 min-w-11 flex items-center justify-center;
+}
+
+.touch-button {
+  @apply py-3 px-6 text-base font-medium rounded-lg;
+}
+
+/* Mobile spacing utilities */
+.mobile-spacing {
+  @apply px-4 py-2;
+}
+
+.mobile-section {
+  @apply mb-6;
+}
+
+/* Future desktop overrides */
+@media (min-width: 1024px) {
+  .mobile-only {
+    @apply hidden;
+  }
+  
+  .desktop-hidden {
+    @apply block;
+  }
+  
+  .mobile-container {
+    @apply max-w-full;
+  }
+  
+  .mobile-button {
+    @apply w-auto py-2 px-4 text-sm;
+  }
+  
+  .mobile-input {
+    @apply py-2 px-3 text-base;
+  }
+}

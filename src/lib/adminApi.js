@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Admin API configuration
 const ADMIN_API_CONFIG = {
-  BASE_URL: (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api') + '/admin',
+  BASE_URL: (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5002/api') + '/admin',
   HEADERS: {
     'Content-Type': 'application/json',
   },
@@ -19,11 +19,11 @@ export const adminApi = axios.create({
 adminApi.interceptors.request.use(
   (config) => {
     if (typeof window !== 'undefined') {
-      const adminToken = localStorage.getItem('adminToken');
+      const adminToken = window.localStorage.getItem('adminToken');
       if (adminToken) {
-        config.headers = { 
-          ...config.headers, 
-          'Authorization': `Bearer ${adminToken}` 
+        config.headers = {
+          ...config.headers,
+          Authorization: `Bearer ${adminToken}`,
         };
       }
     }
@@ -36,13 +36,19 @@ adminApi.interceptors.request.use(
 adminApi.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error({
-      status: error.response?.status || "No status",
-      url: error.config?.url || "No URL",
-      message: error.message || "No message",
-      error: error
-    });
+    // Log detailed error information
+    const errorDetails = {
+      status: error.response?.status || 'No status',
+      url: error.config?.url || 'No URL',
+      message: error.message || 'No message',
+      responseData: error.response?.data || null,
+      code: error.code || null, // Network error codes like 'ECONNREFUSED', 'ERR_NETWORK', etc.
+      error,
+    };
+    // eslint-disable-next-line no-console
+    console.error('Admin API Error:', errorDetails);
 
+    // Handle 401 Unauthorized - redirect to login
     if (error.response?.status === 401) {
       if (typeof window !== 'undefined') {
         const currentPath = window.location.pathname;
@@ -51,6 +57,13 @@ adminApi.interceptors.response.use(
         }
       }
     }
+
+    // Handle network errors (no response received)
+    if (!error.response) {
+      // eslint-disable-next-line no-console
+      console.error('Network error - backend may be down or unreachable:', error.message);
+    }
+
     return Promise.reject(error);
   }
 );
@@ -83,7 +96,8 @@ export const adminRewardsAPI = {
 
 export const adminJunketRewardsAPI = {
   getAll: (params = {}) => adminApi.get('/junket-rewards', { params }),
-  approveImportRewards: (importId) => adminApi.post(`/junket-rewards/approveImportRewards/${importId}`),
+  approveImportRewards: (importId) =>
+    adminApi.post(`/junket-rewards/approveImportRewards/${importId}`),
 };
 
 export const adminWithdrawalsAPI = {
@@ -116,7 +130,7 @@ export const adminUploadsAPI = {
     formData.append('file', file);
     formData.append('type', type);
     return adminApi.post('/uploads', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
   getAll: (params = {}) => adminApi.get('/uploads', { params }),
@@ -145,10 +159,16 @@ export const adminJunketImportAPI = {
     const formData = new FormData();
     formData.append('file', file);
     return adminApi.post('/junket-import/import', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
   getAll: (params = {}) => adminApi.get('/junket-import', { params }),
   getHistory: () => adminApi.get('/junket-import/history'),
   calculateRewards: (importId) => adminApi.post(`/junket-import/${importId}/calculate-rewards`),
+  getMkUsers: (params = {}) => adminApi.get('/junket-import/mk-users', { params }),
+  bulkUpdateRecords: (updates) => adminApi.put('/junket-import/records/bulk-update', { updates }),
+  cancelImport: (importId) => adminApi.delete(`/junket-import/${importId}`),
 };
+
+
+

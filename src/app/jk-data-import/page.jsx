@@ -4,7 +4,7 @@ import { Upload, FileText, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { adminJunketImportAPI } from '@/lib/adminApi';
 import { useTranslation } from '@/hooks/useTranslation';
-import { ADMIN_ROUTES } from '@/constants';
+import { ADMIN_ROUTES, JUNKET_DATA_IMPORT_STATUS } from '@/constants';
 import ConfirmModal from '@/components/ConfirmModal';
 import JunketImportHistoryTable from '@/components/JunketImportHistoryTable';
 import toast from 'react-hot-toast';
@@ -158,6 +158,7 @@ export default function JkDataImportPage() {
       setUploading(false);
     }
   };
+
 
   return (
     <div className="space-y-6">

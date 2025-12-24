@@ -170,7 +170,6 @@ function JkDataImportRecordsContent() {
 
   useEffect(() => {
     loadImportHistory();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams]);
 
   const loadRecords = useCallback(async () => {

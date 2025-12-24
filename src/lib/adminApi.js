@@ -166,7 +166,7 @@ export const adminJunketImportAPI = {
   getHistory: () => adminApi.get('/junket-import/history'),
   calculateRewards: (importId) => adminApi.post(`/junket-import/${importId}/calculate-rewards`),
   getMkUsers: (params = {}) => adminApi.get('/junket-import/mk-users', { params }),
-  bulkUpdateRecords: (updates) => adminApi.put('/junket-import/records/bulk-update', { updates }),
+  bulkUpdateRecords: (updates, importId) => adminApi.put('/junket-import/records/bulk-update', { updates, importId }),
   cancelImport: (importId) => adminApi.delete(`/junket-import/${importId}`),
 };
 

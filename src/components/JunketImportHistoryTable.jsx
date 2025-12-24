@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
 import { ADMIN_ROUTES, JUNKET_DATA_IMPORT_STATUS } from '@/constants';
@@ -7,35 +7,44 @@ import { adminJunketRewardsAPI, adminJunketImportAPI } from '@/lib/adminApi';
 import toast from 'react-hot-toast';
 
 // Helper to get changes from localStorage (supports both importId and month for backward compatibility)
-function getChangesFromLocalStorage(importId, month) {
+function getChangesFromLocalStorage(importId) {
   if (typeof window === 'undefined') return { matchedUsers: {}, winLossChanges: {} };
   
-  // Try importId first (preferred), then fallback to month for backward compatibility
-  const matchedUsersKey = importId ? `jkImportMatchedUsers_${importId}` : `jkImportMatchedUsers_${month}`;
-  const winLossChangesKey = importId ? `jkImportWinLossChanges_${importId}` : `jkImportWinLossChanges_${month}`;
+  // Convert importId to string to match localStorage key format
+  const importIdStr = importId ? String(importId) : null;
   
-  let matchedUsers = {};
+  // Use importId ONLY (not month) to ensure each import has its own unique changes
+  // This prevents different imports with the same month from sharing changes
+  const matchedUsersKey = importIdStr ? `jkImportMatchedUsers_${importIdStr}` : null;
+  const winLossChangesKey = importIdStr ? `jkImportWinLossChanges_${importIdStr}` : null;
+  
+  const matchedUsers = {};
   let winLossChanges = {};
   
   try {
-    const matchedUsersStr = window.localStorage.getItem(matchedUsersKey);
-    const winLossChangesStr = window.localStorage.getItem(winLossChangesKey);
-    
-    if (matchedUsersStr) {
-      const parsed = JSON.parse(matchedUsersStr);
-      // Convert to userId format for API
-      Object.entries(parsed).forEach(([recordId, userData]) => {
-        if (userData && typeof userData === 'object' && userData.id) {
-          matchedUsers[recordId] = userData.id; // Store just the userId
-        } else if (userData) {
-          matchedUsers[recordId] = userData; // Already an ID
-        } else {
-          matchedUsers[recordId] = null;
-        }
-      });
+    // Get matched users using importId only
+    if (matchedUsersKey) {
+      const matchedUsersStr = window.localStorage.getItem(matchedUsersKey);
+      if (matchedUsersStr) {
+        const parsed = JSON.parse(matchedUsersStr);
+        Object.entries(parsed).forEach(([recordId, userData]) => {
+          if (userData && typeof userData === 'object' && userData.id) {
+            matchedUsers[recordId] = userData.id; // Store just the userId
+          } else if (userData) {
+            matchedUsers[recordId] = userData; // Already an ID
+          } else {
+            matchedUsers[recordId] = null;
+          }
+        });
+      }
     }
-    if (winLossChangesStr) {
-      winLossChanges = JSON.parse(winLossChangesStr);
+    
+    // Get winLoss changes using importId only
+    if (winLossChangesKey) {
+      const winLossChangesStr = window.localStorage.getItem(winLossChangesKey);
+      if (winLossChangesStr) {
+        winLossChanges = JSON.parse(winLossChangesStr);
+      }
     }
   } catch (e) {
     console.error('Error reading from localStorage:', e);
@@ -68,12 +77,80 @@ export default function JunketImportHistoryTable({ imports, loading, onRefresh }
   const [approving, setApproving] = useState({});
   const [cancelling, setCancelling] = useState({});
   const [confirming, setConfirming] = useState({});
+  const [calculating, setCalculating] = useState({});
+  const [changeCounts, setChangeCounts] = useState({});
+  
+  // Function to calculate change count for a specific import
+  const getChangeCount = (importId) => {
+    if (typeof window === 'undefined' || !importId) return 0;
+    const importIdKey = `jkImportLastChanges_${importId}`;
+    const stored = window.localStorage.getItem(importIdKey);
+    if (stored) {
+      const count = parseInt(stored, 10);
+      return Number.isNaN(count) ? 0 : count;
+    }
+    return 0;
+  };
+  
+  // Update change counts when imports change or component mounts
+  useEffect(() => {
+    const counts = {};
+    imports.forEach(imp => {
+      if (imp.status === JUNKET_DATA_IMPORT_STATUS.CONFIRMED) {
+        counts[imp.id] = getChangeCount(imp.id);
+      }
+    });
+    setChangeCounts(counts);
+  }, [imports]);
+  
+  // Listen for storage events (when localStorage changes from another tab/page)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    
+    const handleStorageChange = (e) => {
+      // Check if the change is related to our imports
+      if (e.key && e.key.startsWith('jkImportLastChanges_')) {
+        const importId = e.key.replace('jkImportLastChanges_', '');
+        const count = getChangeCount(importId);
+        setChangeCounts(prev => ({ ...prev, [importId]: count }));
+      }
+    };
+    
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Also listen for custom events (for same-tab updates)
+    const handleCustomStorageChange = () => {
+      const counts = {};
+      imports.forEach(imp => {
+        if (imp.status === JUNKET_DATA_IMPORT_STATUS.CONFIRMED) {
+          counts[imp.id] = getChangeCount(imp.id);
+        }
+      });
+      setChangeCounts(counts);
+    };
+    
+    // Listen for focus event to refresh when user returns to tab
+    window.addEventListener('focus', handleCustomStorageChange);
+    
+    // Custom event listener for same-tab localStorage updates
+    window.addEventListener('localStorageChange', handleCustomStorageChange);
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleCustomStorageChange);
+      window.removeEventListener('localStorageChange', handleCustomStorageChange);
+    };
+  }, [imports]);
 
   const formatMonthDisplay = (monthStr) => {
     if (!monthStr || monthStr.length !== 6) return monthStr;
     const year = monthStr.substring(0, 4);
     const month = monthStr.substring(4, 6);
     return `${year}-${month}`;
+  };
+
+  const handleMonthClick = (month) => {
+    router.push(`${ADMIN_ROUTES.JK_DATA_IMPORT_RECORDS}?month=${month}`);
   };
 
   const handleImportClick = (importId) => {
@@ -121,16 +198,57 @@ export default function JunketImportHistoryTable({ imports, loading, onRefresh }
     return count > 0;
   };
 
+  const handleCalculateRewards = async (importId, event) => {
+    event.stopPropagation(); // Prevent any row click events
+    
+    if (!confirm(t('admin.jkDataImport.history.confirmCalculate'))) {
+      return;
+    }
+
+    try {
+      setCalculating(prev => ({ ...prev, [importId]: true }));
+      const response = await adminJunketImportAPI.calculateRewards(importId);
+      
+      if (response.data.success) {
+        const { data } = response.data;
+        if (data && data.totalCalculations !== undefined && data.totalRewardAmount !== undefined) {
+          // Show detailed success message with calculation results
+          let message = t('admin.jkDataImport.history.calculateSuccess');
+          message = message.replace('{{totalCalculations}}', data.totalCalculations);
+          message = message.replace('{{totalRewardAmount}}', data.totalRewardAmount.toFixed(0));
+          toast.success(message);
+        } else {
+          // Fallback to generic success message
+          toast.success(t('admin.jkDataImport.history.calculateSuccess').replace('{{totalCalculations}}', '0').replace('{{totalRewardAmount}}', '0'));
+        }
+        // Wait a bit for the database transaction to commit, then refresh
+        if (onRefresh) {
+          setTimeout(() => {
+            onRefresh();
+          }, 500);
+        }
+      } else {
+        toast.error(response.data.message || t('admin.jkDataImport.history.calculateError'));
+      }
+    } catch (error) {
+      console.error('Error calculating junket rewards:', error);
+      toast.error(error.response?.data?.message || t('admin.jkDataImport.history.calculateError'));
+    } finally {
+      setCalculating(prev => ({ ...prev, [importId]: false }));
+    }
+  };
+
   const handleConfirm = async (importId, month, event) => {
     event.stopPropagation();
 
     // Get changes from localStorage (use importId, fallback to month for backward compatibility)
-    const { matchedUsers, winLossChanges } = getChangesFromLocalStorage(importId, month);
+      const { matchedUsers, winLossChanges } = getChangesFromLocalStorage(importId);
     const changeCount = Object.keys(matchedUsers).length + Object.keys(winLossChanges).length;
 
+
     const confirmMessage = changeCount > 0
-      ? `Confirm this import and calculate rewards? (${changeCount} changes will be applied)`
-      : 'Confirm this import and calculate rewards?';
+      ? `Confirm this import? (${changeCount} changes will be applied)`
+      : 'Confirm this import?';
 
     if (!confirm(confirmMessage)) {
       return;
@@ -139,56 +257,50 @@ export default function JunketImportHistoryTable({ imports, loading, onRefresh }
     try {
       setConfirming(prev => ({ ...prev, [importId]: true }));
       
-      // Step 1: Bulk update records if there are changes
-      if (changeCount > 0) {
-        const updates = [];
-        
-        // Add matched user changes
-        Object.entries(matchedUsers).forEach(([recordId, userId]) => {
+      // Bulk update records (will also update status from confirmed to imported)
+      const updates = [];
+      
+      // Add matched user changes
+      Object.entries(matchedUsers).forEach(([recordId, userId]) => {
+        updates.push({
+          id: recordId,
+          userId: userId || null
+        });
+      });
+      
+      // Add win/loss changes
+      Object.entries(winLossChanges).forEach(([recordId, winLoss]) => {
+        const existingUpdate = updates.find(u => u.id === recordId);
+        if (existingUpdate) {
+          existingUpdate.winLoss = winLoss;
+        } else {
           updates.push({
             id: recordId,
-            userId: userId || null
+            winLoss: winLoss
           });
-        });
-        
-        // Add win/loss changes
-        Object.entries(winLossChanges).forEach(([recordId, winLoss]) => {
-          const existingUpdate = updates.find(u => u.id === recordId);
-          if (existingUpdate) {
-            existingUpdate.winLoss = winLoss;
-          } else {
-            updates.push({
-              id: recordId,
-              winLoss: winLoss
-            });
-          }
-        });
-        
-        if (updates.length > 0) {
-          try {
-            await adminJunketImportAPI.bulkUpdateRecords(updates);
-            toast.success(`Applied ${updates.length} change(s) to records`);
-          } catch (updateError) {
-            console.error('Error updating records:', updateError);
-            toast.error('Failed to update records: ' + (updateError.response?.data?.message || updateError.message));
-            throw updateError;
-          }
         }
+      });
+      
+      console.log('Updates array to send:', updates);
+      
+      // If no updates, still call the API to update status (but with empty array, backend should handle this)
+      if (updates.length === 0) {
+        console.warn('No updates found in localStorage. Still calling API to update status.');
       }
       
-      // Step 2: Calculate rewards
-      const response = await adminJunketImportAPI.calculateRewards(importId);
+      // Call bulk-update API with importId to update records and status
+      const response = await adminJunketImportAPI.bulkUpdateRecords(updates, importId);
 
       if (response.data.success) {
-        const { data } = response.data;
-        let message = 'Import confirmed successfully';
-        if (data && data.totalCalculations !== undefined && data.totalRewardAmount !== undefined) {
-          message = `Import confirmed! Calculated ${data.totalCalculations} rewards totaling ${data.totalRewardAmount.toFixed(0)} JPY`;
+        let message = 'Import confirmed successfully.';
+        if (updates.length > 0) {
+          message = `Applied ${updates.length} change(s) and confirmed import.`;
         }
-        toast.success(message);
+        toast.success(message, { duration: 6000 });
 
-        // Clear changes from localStorage after successful confirm (use importId, fallback to month)
+        // Clear changes from localStorage after successful confirm - clear both importId and month keys
         clearChangesFromLocalStorage(importId, month);
+        console.log('LocalStorage cleared after successful confirm');
 
         if (onRefresh) {
           setTimeout(() => {
@@ -317,7 +429,17 @@ export default function JunketImportHistoryTable({ imports, loading, onRefresh }
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-500">
                   <div className="flex gap-2 items-center">
-                    {(imp.status === JUNKET_DATA_IMPORT_STATUS.CONFIRMED || imp.status === JUNKET_DATA_IMPORT_STATUS.CALCULATED) && hasPendingRewards(imp) && (
+                    {imp.status === JUNKET_DATA_IMPORT_STATUS.IMPORTED && (
+                      <button
+                        onClick={(e) => handleCalculateRewards(imp.id, e)}
+                        disabled={calculating[imp.id]}
+                        className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded text-xs hover:bg-yellow-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={t('admin.jkDataImport.history.calculateTooltip')}
+                      >
+                        {calculating[imp.id] ? t('admin.jkDataImport.history.calculating') : t('admin.jkDataImport.history.calculate')}
+                      </button>
+                    )}
+                    {imp.status === JUNKET_DATA_IMPORT_STATUS.CALCULATED && hasPendingRewards(imp) && (
                       <button
                         onClick={(e) => handleApprove(imp.id, e)}
                         disabled={approving[imp.id]}
@@ -331,42 +453,32 @@ export default function JunketImportHistoryTable({ imports, loading, onRefresh }
                         {t('admin.jkDataImport.history.approved')}
                       </span>
                     )}
+                    {imp.status === JUNKET_DATA_IMPORT_STATUS.CALCULATED && !hasPendingRewards(imp) && !hasRewards(imp) && (
+                      <span className="px-3 py-1 bg-gray-100 text-gray-800 rounded text-xs">
+                        {t('admin.jkDataImport.history.noRewards')}
+                      </span>
+                    )}
                     {imp.status === JUNKET_DATA_IMPORT_STATUS.CONFIRMED && (
                       <>
-                        {(() => {
-                          // Get change count from localStorage for this import (use importId, fallback to month)
-                          let changeCount = 0;
-                          if (typeof window !== 'undefined') {
-                            const importIdKey = `jkImportLastChanges_${imp.id}`;
-                            const monthKey = `jkImportLastChanges_${imp.month}`;
-                            const stored = window.localStorage.getItem(importIdKey) || window.localStorage.getItem(monthKey);
-                            if (stored) {
-                              const count = parseInt(stored, 10);
-                              changeCount = Number.isNaN(count) ? 0 : count;
-                            }
-                          }
-                          return (
-                            <button
-                              onClick={(e) => handleConfirm(imp.id, imp.month, e)}
-                              disabled={confirming[imp.id] || cancelling[imp.id]}
-                              className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded text-xs hover:bg-yellow-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {confirming[imp.id]
-                                ? t('admin.jkDataImport.history.confirming', 'Confirming...')
-                                : changeCount > 0
-                                  ? t('admin.jkDataImport.history.confirm', `Confirm (${changeCount})`)
-                                  : t('admin.jkDataImport.history.confirm', 'Confirm')}
-                            </button>
-                          );
-                        })()}
+                        <button
+                          onClick={(e) => handleConfirm(imp.id, imp.month, e)}
+                          disabled={confirming[imp.id] || cancelling[imp.id]}
+                          className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded text-xs hover:bg-yellow-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {confirming[imp.id]
+                            ? t('admin.jkDataImport.history.confirming', 'Confirming...')
+                            : (changeCounts[imp.id] || 0) > 0
+                              ? t('admin.jkDataImport.history.confirm', `Confirm (${changeCounts[imp.id] || 0})`)
+                              : t('admin.jkDataImport.history.confirm', 'Confirm')}
+                        </button>
                         <button
                           onClick={(e) => handleCancel(imp.id, e)}
                           disabled={cancelling[imp.id] || confirming[imp.id]}
                           className="px-3 py-1 bg-red-100 text-red-800 rounded text-xs hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           {cancelling[imp.id]
-                            ? t('admin.jkDataImport.history.cancelling', 'Cancelling...')
-                            : t('admin.jkDataImport.history.cancel', 'Cancel')}
+                            ? t('admin.jkDataImport.history.cancelling', 'Deleting...')
+                            : t('admin.jkDataImport.history.cancel', 'Delete')}
                         </button>
                       </>
                     )}

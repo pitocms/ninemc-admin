@@ -31,17 +31,13 @@ function JkDataImportRecordsContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   
-  // Load changes from localStorage on mount and when importId or month changes
+  // Load changes from localStorage on mount and when importId changes
+  // ONLY use importId - never use month for localStorage keys
   useEffect(() => {
-    const key = selectedImportId || selectedMonth;
-    if (!key || typeof window === 'undefined') return;
+    if (!selectedImportId || typeof window === 'undefined') return;
     
-    const matchedUsersKey = selectedImportId 
-      ? `jkImportMatchedUsers_${selectedImportId}` 
-      : `jkImportMatchedUsers_${selectedMonth}`;
-    const winLossChangesKey = selectedImportId 
-      ? `jkImportWinLossChanges_${selectedImportId}` 
-      : `jkImportWinLossChanges_${selectedMonth}`;
+    const matchedUsersKey = `jkImportMatchedUsers_${selectedImportId}`;
+    const winLossChangesKey = `jkImportWinLossChanges_${selectedImportId}`;
     
     try {
       const matchedUsersStr = window.localStorage.getItem(matchedUsersKey);
@@ -69,22 +65,16 @@ function JkDataImportRecordsContent() {
     } catch (e) {
       console.error('Error loading from localStorage:', e);
     }
-  }, [selectedImportId, selectedMonth]);
+  }, [selectedImportId]);
   
   // Save changes to localStorage whenever they change
+  // ONLY use importId - never use month for localStorage keys
   useEffect(() => {
-    const key = selectedImportId || selectedMonth;
-    if (!key || typeof window === 'undefined') return;
+    if (!selectedImportId || typeof window === 'undefined') return;
     
-    const matchedUsersKey = selectedImportId 
-      ? `jkImportMatchedUsers_${selectedImportId}` 
-      : `jkImportMatchedUsers_${selectedMonth}`;
-    const winLossChangesKey = selectedImportId 
-      ? `jkImportWinLossChanges_${selectedImportId}` 
-      : `jkImportWinLossChanges_${selectedMonth}`;
-    const changeCountKey = selectedImportId 
-      ? `jkImportLastChanges_${selectedImportId}` 
-      : `jkImportLastChanges_${selectedMonth}`;
+    const matchedUsersKey = `jkImportMatchedUsers_${selectedImportId}`;
+    const winLossChangesKey = `jkImportWinLossChanges_${selectedImportId}`;
+    const changeCountKey = `jkImportLastChanges_${selectedImportId}`;
     
     try {
       const changeCount = Object.keys(allMatchedUsers).length + Object.keys(allWinLossChanges).length;
@@ -109,16 +99,22 @@ function JkDataImportRecordsContent() {
         
         window.localStorage.setItem(winLossChangesKey, JSON.stringify(allWinLossChanges));
         window.localStorage.setItem(changeCountKey, String(changeCount));
+        
+        // Dispatch custom event to notify other components (like history table)
+        window.dispatchEvent(new Event('localStorageChange'));
       } else {
         // Clear if no changes
         window.localStorage.removeItem(matchedUsersKey);
         window.localStorage.removeItem(winLossChangesKey);
         window.localStorage.removeItem(changeCountKey);
+        
+        // Dispatch custom event to notify other components
+        window.dispatchEvent(new Event('localStorageChange'));
       }
     } catch (e) {
       console.error('Error saving to localStorage:', e);
     }
-  }, [allMatchedUsers, allWinLossChanges, selectedImportId, selectedMonth]);
+  }, [allMatchedUsers, allWinLossChanges, selectedImportId]);
   
   // Use refs to access current values without triggering re-renders
   const allMatchedUsersRef = useRef(allMatchedUsers);
@@ -434,6 +430,7 @@ function JkDataImportRecordsContent() {
           <h1 className="text-2xl font-bold text-gray-900">{t('admin.jkDataImport.records.title')}</h1>
         </div>
         <div className="flex gap-2">
+          {/* Save Changes button commented out
           {hasUnsavedChanges && isEditableImport && (
             <button
               onClick={handleSubmit}
@@ -444,6 +441,7 @@ function JkDataImportRecordsContent() {
               {isSubmitting ? 'Saving...' : `Save Changes (${Object.keys(allMatchedUsers).length + Object.keys(allWinLossChanges).length})`}
             </button>
           )}
+          */}
           <button
             onClick={() => router.push(ADMIN_ROUTES.JK_DATA_IMPORT)}
             className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"

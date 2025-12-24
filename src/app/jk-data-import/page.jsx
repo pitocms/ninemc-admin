@@ -1,6 +1,6 @@
 'use client';
 import { useState, useEffect } from 'react';
-import { Upload, FileText, Loader2 } from 'lucide-react';
+import { Upload, FileText, Loader2, CheckCircle2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { adminJunketImportAPI } from '@/lib/adminApi';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -17,6 +17,7 @@ export default function JkDataImportPage() {
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     loadImportHistory();
@@ -159,18 +160,104 @@ export default function JkDataImportPage() {
     }
   };
 
+  // Get the latest draft import (status = imported)
+  const getLatestDraftImport = () => {
+    return importHistory.find(imp => imp.status === JUNKET_DATA_IMPORT_STATUS.IMPORTED) || null;
+  };
+
+  // Get change count from localStorage for the latest draft import
+  const getChangeCount = () => {
+    const latestDraft = getLatestDraftImport();
+    if (!latestDraft || typeof window === 'undefined') return 0;
+    
+    const key = `jkImportLastChanges_${latestDraft.month}`;
+    const stored = window.localStorage.getItem(key);
+    if (stored) {
+      const count = parseInt(stored, 10);
+      return Number.isNaN(count) ? 0 : count;
+    }
+    return 0;
+  };
+
+  const handleConfirmImport = async () => {
+    const latestDraft = getLatestDraftImport();
+    
+    if (!latestDraft) {
+      toast.error('No draft import found to confirm');
+      return;
+    }
+
+    const changeCount = getChangeCount();
+    const confirmMessage = changeCount > 0
+      ? `Confirm import "${latestDraft.fileName}" for month ${latestDraft.month}? (${changeCount} changes saved)`
+      : `Confirm import "${latestDraft.fileName}" for month ${latestDraft.month}?`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      setConfirming(true);
+      const response = await adminJunketImportAPI.calculateRewards(latestDraft.id);
+      
+      if (response.data.success) {
+        const { data } = response.data;
+        let message = 'Import confirmed successfully';
+        if (data && data.totalCalculations !== undefined && data.totalRewardAmount !== undefined) {
+          message = `Import confirmed! Calculated ${data.totalCalculations} rewards totaling ${data.totalRewardAmount.toFixed(0)} JPY`;
+        }
+        toast.success(message);
+        
+        // Clear the change count from localStorage after successful confirm
+        if (typeof window !== 'undefined') {
+          const key = `jkImportLastChanges_${latestDraft.month}`;
+          window.localStorage.removeItem(key);
+        }
+        
+        // Reload history
+        loadImportHistory();
+      } else {
+        toast.error(response.data.message || 'Failed to confirm import');
+      }
+    } catch (error) {
+      console.error('Error confirming import:', error);
+      toast.error(error.response?.data?.message || 'Failed to confirm import');
+    } finally {
+      setConfirming(false);
+    }
+  };
+
+  const latestDraftImport = getLatestDraftImport();
+  const changeCount = getChangeCount();
+  const showConfirmButton = latestDraftImport && latestDraftImport.status === JUNKET_DATA_IMPORT_STATUS.IMPORTED;
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-900">{t('admin.jkDataImport.title')}</h1>
-        <button
-          onClick={() => router.push(ADMIN_ROUTES.JK_DATA_IMPORT_RECORDS)}
-          className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-        >
-          {t('admin.jkDataImport.viewRecords')}
-        </button>
+        <div className="flex gap-2">
+          {showConfirmButton && (
+            <button
+              onClick={handleConfirmImport}
+              disabled={confirming}
+              className="px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {confirming 
+                ? 'Confirming...' 
+                : changeCount > 0 
+                  ? `Confirm (${changeCount})` 
+                  : 'Confirm Import'}
+            </button>
+          )}
+          <button
+            onClick={() => router.push(ADMIN_ROUTES.JK_DATA_IMPORT_RECORDS)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+          >
+            {t('admin.jkDataImport.viewRecords')}
+          </button>
+        </div>
       </div>
 
       {/* Import Section */}

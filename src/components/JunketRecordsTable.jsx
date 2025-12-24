@@ -67,6 +67,12 @@ function JunketRecordsTable({
       });
     }
   }, [records, allMatchedUsers]);
+  
+  // Ref to track if we need to force update mkUsers immediately
+  const mkUsersRef = useRef(mkUsers);
+  useEffect(() => {
+    mkUsersRef.current = mkUsers;
+  }, [mkUsers]);
 
   const loadMkUsers = async (search = '', recordId = null) => {
     try {
@@ -119,7 +125,7 @@ function JunketRecordsTable({
         value: user.id, // Keep original ID, getOptionValue will convert to string
         label: displayName,
         casinoId: casinoId,
-        fullLabel: casinoId ? `${displayName} • ${casinoId}` : displayName,
+        fullLabel: displayName, // Only display name, no ID
         user: user
       };
     });
@@ -137,19 +143,33 @@ function JunketRecordsTable({
     
     // Convert IDs to strings for comparison (handles BigInt)
     const matchedUserId = String(matchedUser.id);
-    const found = mkUserOptions.find(opt => String(opt.value) === matchedUserId);
+    
+    // CRITICAL: Must find the exact option from mkUserOptions array
+    // React-select requires the value to be an exact match from the options array
+    const found = mkUserOptions.find(opt => {
+      if (!opt || opt.value === undefined) return false;
+      const optValue = String(opt.value);
+      // Also check by user ID if available
+      if (opt.user) {
+        const optUserId = String(opt.user.id);
+        if (optUserId === matchedUserId) return true;
+      }
+      return optValue === matchedUserId;
+    });
+    
     if (found) {
       return found;
     }
-    // If user not found in options, create a temporary option for it
+    
+    // If user not found in options, the useEffect should add it
+    // But for now, create a temporary option so react-select can display it
+    // The useEffect will add the user to mkUsers, and on next render, getSelectedOption will find it in mkUserOptions
     const displayName = getUserDisplayName(matchedUser);
-    const casinoId = matchedUser.casinoUniqueId || '';
-    // Ensure value is consistent (use the actual ID, react-select will convert via getOptionValue)
     return {
       value: matchedUser.id,
       label: displayName,
-      casinoId: casinoId,
-      fullLabel: casinoId ? `${displayName} • ${casinoId}` : displayName,
+      casinoId: matchedUser.casinoUniqueId || '',
+      fullLabel: displayName,
       user: matchedUser
     };
   };
@@ -192,25 +212,26 @@ function JunketRecordsTable({
     }
   };
 
-  // Custom styles for react-select - more professional
-  const customStyles = (isMatched) => ({
+  // Custom styles for react-select - neutral colors
+  const customStyles = () => ({
     control: (provided, state) => ({
       ...provided,
-      borderColor: isMatched ? '#10b981' : '#ef4444',
-      backgroundColor: isMatched ? '#d1fae5' : '#fee2e2',
+      borderColor: '#d1d5db',
+      backgroundColor: '#ffffff',
       cursor: 'pointer',
       minHeight: '42px',
       fontSize: '14px',
       fontWeight: 500,
-      boxShadow: state.isFocused ? (isMatched ? '0 0 0 2px rgba(16, 185, 129, 0.2)' : '0 0 0 2px rgba(239, 68, 68, 0.2)') : 'none',
+      width: '256px',
+      boxShadow: state.isFocused ? '0 0 0 2px rgba(99, 102, 241, 0.2)' : 'none',
       '&:hover': {
-        borderColor: isMatched ? '#10b981' : '#ef4444',
+        borderColor: '#9ca3af',
       }
     }),
     singleValue: (provided) => ({
       ...provided,
-      color: isMatched ? '#059669' : '#dc2626',
-      fontWeight: 600,
+      color: '#1f2937',
+      fontWeight: 400,
       fontSize: '15px',
       lineHeight: '1.5',
       display: 'flex',
@@ -237,7 +258,7 @@ function JunketRecordsTable({
     dropdownIndicator: (provided) => ({
       ...provided,
       cursor: 'pointer',
-      color: isMatched ? '#059669' : '#dc2626',
+      color: '#6b7280',
       padding: '8px'
     }),
     menu: (provided) => ({
@@ -312,7 +333,7 @@ function JunketRecordsTable({
             {records.map((record) => {
               const selectedOption = getSelectedOption(record);
               const matchedUser = allMatchedUsers[record.id] !== undefined ? allMatchedUsers[record.id] : record.user;
-              const isMatched = !!matchedUser;
+              const matchedUserId = matchedUser ? String(matchedUser.id) : 'none';
               return (
               <tr key={record.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-sm text-gray-900 font-mono">{record.customerNumber}</td>
@@ -321,44 +342,59 @@ function JunketRecordsTable({
                   {initialLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
                   ) : (
+                    <div className="w-64">
                     <Select
-                      key={`select-${record.id}-${matchedUser ? String(matchedUser.id) : 'none'}`}
+                      key={`select-${record.id}-${matchedUserId}`}
                       value={selectedOption}
                       options={mkUserOptions}
                       isDisabled={isReadOnly}
                       isSearchable={true}
                       isClearable={false}
                       isLoading={loadingDropdowns[record.id] || false}
-                      styles={customStyles(isMatched)}
+                      styles={customStyles()}
                       placeholder={t('admin.jkDataImport.records.notMatched')}
                       className="react-select-container"
                       classNamePrefix="react-select"
                       inputValue={searchInputs[record.id] || ''}
                       onInputChange={(inputValue, action) => handleInputChange(inputValue, action, record.id)}
-                      formatOptionLabel={({ label, casinoId }, { context }) => {
+                      onMenuClose={() => {
+                        // Clear search input when menu closes after selection
+                        setSearchInputs(prev => ({
+                          ...prev,
+                          [record.id]: ''
+                        }));
+                      }}
+                      isOptionSelected={(option) => {
+                        // Custom comparison to ensure selected option matches
+                        if (!selectedOption || !option) return false;
+                        return String(option.value) === String(selectedOption.value);
+                      }}
+                      formatOptionLabel={(option, { context }) => {
+                        // Use fullLabel if available, otherwise label
+                        const displayLabel = option.fullLabel || option.label || '';
                         if (context === 'value') {
                           // Display format for selected value (in the control)
                           return (
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold">{label}</span>
-                              {casinoId && (
-                                <span className="text-xs opacity-75">({casinoId})</span>
-                              )}
+                              <span>{displayLabel}</span>
                             </div>
                           );
                         }
-                        // Display format for dropdown options
+                        // Display format for dropdown options - only show name
                         return (
                           <div className="py-1">
-                            <div className="font-semibold text-gray-900 text-base">{label}</div>
-                            {casinoId && (
-                              <div className="text-xs text-gray-500 mt-1 font-mono">ID: {casinoId}</div>
-                            )}
+                            <div className="text-gray-900 text-base">{displayLabel}</div>
                           </div>
                         );
                       }}
-                      getOptionLabel={(option) => option.fullLabel || option.label}
-                      getOptionValue={(option) => String(option.value)}
+                      getOptionLabel={(option) => {
+                        if (!option) return '';
+                        return option.fullLabel || option.label || '';
+                      }}
+                      getOptionValue={(option) => {
+                        if (!option || option.value === undefined) return '';
+                        return String(option.value);
+                      }}
                       onChange={(selected) => {
                         // Call parent handler to update matched user
                         if (!selected || selected.value === '') {
@@ -366,23 +402,76 @@ function JunketRecordsTable({
                           if (onMatchedUserChange) {
                             onMatchedUserChange(record.id, null);
                           }
-                        } else if (selected.user) {
-                          // Ensure selected user is in the options list FIRST
-                          setMkUsers(prev => {
-                            const exists = prev.find(u => String(u.id) === String(selected.user.id));
-                            if (!exists) {
-                              return [...prev, selected.user];
-                            }
-                            return prev;
-                          });
+                          // Clear search input
+                          setSearchInputs(prev => ({
+                            ...prev,
+                            [record.id]: ''
+                          }));
+                        } else {
+                          // React-select returns the exact option object from mkUserOptions
+                          // The selected object IS the option from the options array
+                          // It should have: value, label, fullLabel, user properties
                           
-                          // Then update matched user via parent
-                          if (onMatchedUserChange) {
-                            onMatchedUserChange(record.id, selected.user);
+                          // Get the user object - it should be on selected.user
+                          let selectedUser = selected.user;
+                          
+                          // If user is not on selected, try to find the option from mkUserOptions by value
+                          // This can happen if react-select doesn't preserve all properties
+                          if (!selectedUser) {
+                            const foundOption = mkUserOptions.find(opt => {
+                              const optValue = String(opt.value);
+                              const selectedValue = String(selected.value);
+                              return optValue === selectedValue;
+                            });
+                            if (foundOption && foundOption.user) {
+                              selectedUser = foundOption.user;
+                            }
+                          }
+                          
+                          // If still not found, try to find user in mkUsers by ID
+                          if (!selectedUser && selected.value) {
+                            const foundUser = mkUsers.find(u => String(u.id) === String(selected.value));
+                            if (foundUser) {
+                              selectedUser = foundUser;
+                            }
+                          }
+                          
+                          if (selectedUser) {
+                            // CRITICAL: Update parent FIRST to update allMatchedUsers
+                            // This ensures getSelectedOption can find the user
+                            if (onMatchedUserChange) {
+                              onMatchedUserChange(record.id, selectedUser);
+                            }
+                            
+                            // Also ensure user is in mkUsers list immediately
+                            // This ensures mkUserOptions includes the user for getSelectedOption
+                            setMkUsers(prev => {
+                              const exists = prev.find(u => String(u.id) === String(selectedUser.id));
+                              if (!exists) {
+                                return [...prev, selectedUser];
+                              }
+                              return prev;
+                            });
+                            
+                            // Clear search input after selection
+                            setSearchInputs(prev => ({
+                              ...prev,
+                              [record.id]: ''
+                            }));
+                          } else {
+                            console.error('Cannot find user for selected option:', {
+                              recordId: record.id,
+                              selected,
+                              selectedValue: selected?.value,
+                              selectedHasUser: !!selected?.user,
+                              mkUserOptionsCount: mkUserOptions.length,
+                              mkUsersCount: mkUsers.length
+                            });
                           }
                         }
                       }}
                     />
+                    </div>
                   )}
                 </td>
                 <td className="px-4 py-3 text-sm">
@@ -404,15 +493,15 @@ function JunketRecordsTable({
                       }
                     }}
                     disabled={isReadOnly}
-                    className={`w-full px-2 py-1 border rounded-md font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors ${
+                    className={`w-32 px-2 py-1 border rounded-md bg-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors ${
                       (() => {
                         const currentValue = allWinLossChanges[record.id] !== undefined 
                           ? allWinLossChanges[record.id] 
                           : record.winLoss;
                         const numValue = parseFloat(currentValue);
                         return isNaN(numValue) || numValue >= 0
-                          ? 'text-green-600 border-green-300 bg-green-50' 
-                          : 'text-red-600 border-red-300 bg-red-50';
+                          ? 'text-green-600 border-green-300' 
+                          : 'text-red-600 border-red-300';
                       })()
                     }`}
                   />

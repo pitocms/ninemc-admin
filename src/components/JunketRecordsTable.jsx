@@ -493,7 +493,7 @@ function JunketRecordsTable({
                       }
                     }}
                     disabled={isReadOnly}
-                    className={`w-32 px-2 py-1 border rounded-md bg-white font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors ${
+                    className={`w-32 px-2 py-1 border rounded-md font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-colors ${
                       (() => {
                         const currentValue = allWinLossChanges[record.id] !== undefined 
                           ? allWinLossChanges[record.id] 

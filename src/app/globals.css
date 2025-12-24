@@ -80,9 +80,7 @@ select option:hover {
   background-color: #f3f4f6 !important; /* Light gray background on hover */
 }
 
-input {
-  color: var(--foreground);
-}
+/* Removed global input color to avoid overriding Tailwind `text-*` utilities. */
 /* Mobile-first responsive design */
 .mobile-container {
   @apply w-full max-w-sm mx-auto;

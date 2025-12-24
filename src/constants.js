@@ -20,6 +20,7 @@ export const ADMIN_ROUTES = {
   // Junket Data Import Status enum (matching Prisma schema)
   export const JUNKET_DATA_IMPORT_STATUS = {
     IMPORTED: 'imported',
+    CONFIRMED: 'confirmed',
     CALCULATED: 'calculated',
     APPROVED: 'approved',
   };

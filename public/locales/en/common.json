@@ -706,7 +706,7 @@
           "uploadAndImport": "Upload & Import",
           "uploading": "Uploading...",
           "fileSelected": "File selected",
-          "note": "Note: Import is only allowed once per month for the previous month. Files must contain columns: Customer number, Customer English name, Drop Amt, Expected return, Winros.",
+          "note": "Note: Each import is tagged as the previous month. Files must contain columns: Customer number, Customer English name, Drop Amt, Expected return, Winros.",
           "requiredColumns": "Required columns: Customer number, Customer English name, Drop Amt, Expected return, Winros"
         },
         "history": {
@@ -779,6 +779,7 @@
           "noFileSelected": "Please select a file to upload",
           "loadingRecords": "Loading records...",
           "loadingHistory": "Loading import history...",
+          "failedToLoad": "Failed to load data",
           "failedToLoadRecords": "Failed to load records",
           "failedToLoadHistory": "Failed to load import history",
           "duplicateImport": "Import for {{month}} already exists. Duplicate imports are not allowed.",

@@ -110,7 +110,6 @@ export default function AdminLoginPage() {
                 placeholder={t('auth.emailPlaceholder')}
                 value={formData.email}
                 onChange={handleChange}
-                style={{ color: '#111827' }}
               />
             </div>
             <div>
@@ -127,7 +126,6 @@ export default function AdminLoginPage() {
                 placeholder={t('auth.passwordPlaceholder')}
                 value={formData.password}
                 onChange={handleChange}
-                style={{ color: '#111827' }}
               />
             </div>
           </div>
